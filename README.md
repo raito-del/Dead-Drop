@@ -1,44 +1,28 @@
-# Dead Drop — Made by Team BreakByte
+# Dead Drop
 
-## ফাইল স্ট্রাকচার
-- `index.html` — হোম পেজ (হ্যাকার অ্যানিমেশন)
-- `notes.html` — PDF লিস্ট + আপলোডার
-- `style.css` — থিম ফাইল (এটা বদলালেই পুরো লুক বদলে যাবে)
-- `js/config.js` — এখান থেকেই Firebase / GitHub সুইচ করবে
-- `js/firebase-mode.js`, `js/github-mode.js` — দুই মোডের কোড আলাদা
-- `notes/` — GitHub মোডে PDF এখানে রাখবে
+A private notes vault made by Team BreakByte.
 
-## ১. GitHub Pages চালু
-1. নতুন **public** রিপোজিটরি বানাও, সব ফাইল আপলোড করো।
-2. Settings → Pages → Branch: `main` / root → Save।
-3. কিছুক্ষণ পর `https://raito-del.github.io/Dead-Drop/` লিঙ্ক পাবে।
+## Overview
+Dead Drop is a password-protected website where members can browse and download study notes. Notes are organized into folders, and the site owner can create folders and upload PDFs directly from the website.
 
-## ২. Firebase মোড (শুরুতে এটা)
-1. Firebase console-এ প্রজেক্ট বানাও, Web app যোগ করো, config কপি করে `js/config.js`-এ বসাও।
-2. Authentication → Email/Password চালু করো, নিজের জন্য একটা ইউজার বানাও।
-3. Storage চালু করো, Rules-এ এটা বসাও:
-```
-rules_version = '2';
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /notes/{file} {
-      allow read: if true;
-      allow write: if request.auth != null
-        && request.resource.contentType == 'application/pdf'
-        && request.resource.size < 25 * 1024 * 1024;
-    }
-  }
-}
-```
-4. Authentication → Settings → Authorized domains-এ `raito-del.github.io` যোগ করো।
-5. `notes.html` খুলে লগইন করো, তারপর PDF আপলোড করো।
+## Features
+- Password-protected access for viewers
+- Separate admin login for managing content
+- Folder-based note organization
+- Search across all folders
+- PDF download for every visitor
 
-## ৩. GitHub মোডে শিফট (Firebase-এ কার্ড চাইলে)
-1. `js/config.js`-এ `MODE = "github"` লিখো, আর `GITHUB` অংশে নিজের username/repo বসাও।
-2. PDF গুলো রিপোজিটরির `notes/` ফোল্ডারে আপলোড করো (notes.html-এর বাটন সরাসরি GitHub আপলোড পেজ খুলবে)।
-3. কমিট করলেই সাইটে লিস্ট আপডেট হবে।
+## Admin Guide
+1. Open the notes page and log in as admin.
+2. Save the access token once in the admin panel. It is stored only in the current browser.
+3. Create folders and open them to go deeper.
+4. Upload PDFs to the folder you are currently in.
+5. Use the search box to find any file across all folders.
 
-## নোট
-- লোকালে `file://` দিয়ে খুললে চলবে না, কারণ ES modules লাগে। VS Code-এর Live Server বা `python -m http.server` ব্যবহার করো।
-- GitHub মোডে রিপোজিটরি public হতে হবে।
+## Notes
+- The site must be opened through a web server or the hosted link, not by opening the file directly on your computer.
+- Anyone who can view the repository can also view the notes, so keep sensitive material out of it.
+- Keep the access token private. Never share it, post it, or save it in shared files.
 
+## Team
+Made by Team BreakByte.
