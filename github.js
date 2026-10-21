@@ -1,4 +1,4 @@
-// GitHub-এ ফোল্ডার বানানো ও PDF আপলোড করার সব কাজ এখানে।
+// Everything for creating folders and uploading PDFs to GitHub lives here.
 import { GITHUB } from "./config.js";
 
 const TOKEN_KEY = "dd_gh_token";
@@ -14,14 +14,14 @@ export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(r.result.split(",")[1]);
-    r.onerror = () => reject(new Error("ফাইল পড়া যায়নি"));
+    r.onerror = () => reject(new Error("Could not read the file"));
     r.readAsDataURL(file);
   });
 }
 
 async function putFile(repoPath, base64Content, message) {
   const token = getToken();
-  if (!token) throw new Error("আগে GitHub টোকেন বসাও");
+  if (!token) throw new Error("Please save a GitHub token first");
 
   const res = await fetch(`${API}/${encPath(repoPath)}`, {
     method: "PUT",
@@ -38,10 +38,10 @@ async function putFile(repoPath, base64Content, message) {
   });
 
   if (res.status === 401 || res.status === 403) {
-    throw new Error("টোকেন ঠিক নেই বা অনুমতি নেই");
+    throw new Error("Token is invalid or does not have permission");
   }
   if (res.status === 422 || res.status === 409) {
-    throw new Error("এই নামে ফোল্ডার বা ফাইল আগে থেকেই আছে");
+    throw new Error("A folder or file with this name already exists");
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -49,7 +49,7 @@ async function putFile(repoPath, base64Content, message) {
   }
 }
 
-// ফোল্ডার = ভেতরে একটা খালি .gitkeep ফাইল (GitHub খালি ফোল্ডার রাখে না)
+// A folder is created by adding an empty .gitkeep file inside it (GitHub does not store empty folders)
 export async function createFolder(rel) {
   await putFile(`${GITHUB.folder}/${rel}/.gitkeep`, "", `Create folder ${rel}`);
 }
