@@ -1,6 +1,6 @@
 // ============================================
 //  Matrix rain background
-//  HTML-এ <canvas id="matrix"></canvas> থাকতে হবে
+//  The HTML must include <canvas id="matrix"></canvas>
 // ============================================
 
 const canvas = document.getElementById("matrix");
@@ -19,7 +19,7 @@ if (canvas) {
   }
 
   function draw() {
-    // আগের ফ্রেম ধীরে ধীরে ঝাপসা হয়ে লেজ তৈরি করে
+    // The previous frame slowly fades out, which creates the trailing effect
     ctx.fillStyle = "rgba(5, 8, 5, 0.12)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
