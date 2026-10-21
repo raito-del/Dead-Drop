@@ -13,7 +13,7 @@ export const GITHUB = {
   folder: "notes",
 };
 
- Firebase Authentication
+// শুধু লগইনের জন্য Firebase Authentication
 export const FIREBASE = {
   apiKey: "AIzaSyCzjhLBiMMSolj51Afh2uaWibw0zKRRykk",
   authDomain: "dead-drop-24187.firebaseapp.com",
@@ -23,8 +23,8 @@ export const FIREBASE = {
   appId: "1:13506524223:web:4648b3065c36581dc0f48a",
 };
 
-
+// বন্ধুদের শেয়ার্ড অ্যাকাউন্ট
 export const VIEWER_EMAIL = "friends@deaddrop.app";
 
-
+// তোমার admin অ্যাকাউন্ট
 export const ADMIN_EMAIL = "sadnanahmed394@gmail.com";
