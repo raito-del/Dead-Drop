@@ -156,3 +156,150 @@ function render() {
   const subfolders = [
     ...new Set(
       allFolders
+        .filter((s) => s.length > depth && under(s, currentPath))
+        .map((s) => s[depth])
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const files = allFiles.filter(
+    (f) => f.folders.length === depth && under(f.folders, currentPath)
+  );
+
+  subfolders.forEach((name) => {
+    const count = allFiles.filter(
+      (f) => f.folders.length > depth && under(f.folders, currentPath) && f.folders[depth] === name
+    ).length;
+    listEl.append(folderRow(name, count));
+  });
+  files.forEach((f) => listEl.append(fileRow(f, "")));
+
+  if (!allFiles.length && !subfolders.length) statusEl.textContent = "Nothing in notes yet.";
+  else if (!subfolders.length && !files.length) statusEl.textContent = "This folder is empty for now.";
+  else statusEl.textContent = "";
+}
+
+function renderCrumbs() {
+  crumbsEl.replaceChildren();
+  const make = (label, path) => {
+    const b = el("button", { className: "btn ghost", textContent: label });
+    b.addEventListener("click", () => {
+      currentPath = path;
+      searchEl.value = "";
+      render();
+      renderAdmin();
+    });
+    return b;
+  };
+  crumbsEl.append(make("notes", []));
+  currentPath.forEach((seg, i) => {
+    crumbsEl.append(" / ", make(seg, currentPath.slice(0, i + 1)));
+  });
+}
+
+function folderRow(name, count) {
+  const open = el("button", { className: "btn", textContent: "Open" });
+  open.addEventListener("click", () => {
+    currentPath = [...currentPath, name];
+    searchEl.value = "";
+    render();
+    renderAdmin();
+  });
+
+  const info = el("div", {},
+    el("div", { className: "file-name", textContent: name }),
+    el("div", { className: "file-meta", textContent: "Folder · " + count + " PDF(s)" })
+  );
+  return el("div", { className: "file" }, info, open);
+}
+
+function fileRow(f, label) {
+  const dl = el("a", { className: "btn", textContent: "Download" });
+  dl.href = rawUrl(f.path);
+  dl.target = "_blank";
+  dl.rel = "noopener";
+  dl.setAttribute("download", f.name);
+
+  const meta = [label, sizeText(f.size)].filter(Boolean).join(" · ");
+  const info = el("div", {},
+    el("div", { className: "file-name", textContent: f.name.replace(/\.pdf$/i, "") }),
+    el("div", { className: "file-meta", textContent: meta })
+  );
+  return el("div", { className: "file" }, info, dl);
+}
+
+// ---------- admin panel ----------
+function renderAdmin() {
+  if (!isAdminUser) return;
+  adminPanel.classList.remove("hidden");
+  adminPanel.replaceChildren();
+
+  const where = "notes" + (currentPath.length ? " / " + currentPath.join(" / ") : "");
+  adminPanel.append(
+    el("h2", { textContent: "admin: folders & PDFs" }),
+    el("div", { className: "hint", textContent: "You are in: " + where })
+  );
+
+  if (!getToken()) {
+    const tok = el("input", { type: "password", placeholder: "GitHub token (enter once)", autocomplete: "off" });
+    const save = el("button", { className: "btn", textContent: "Save", type: "button" });
+    save.onclick = () => {
+      if (!tok.value.trim()) return showMsg("Token is empty");
+      saveToken(tok.value);
+      renderAdmin();
+    };
+    adminPanel.append(el("div", { className: "row" }, tok, save));
+  } else {
+    const clearBtn = el("button", { className: "btn ghost", textContent: "Delete token", type: "button" });
+    clearBtn.onclick = () => { clearToken(); renderAdmin(); };
+    adminPanel.append(
+      el("div", { className: "hint", textContent: "GitHub token is saved in this browser." }),
+      clearBtn
+    );
+
+    // New folder
+    const folderIn = el("input", { type: "text", placeholder: "New folder name" });
+    const folderBtn = el("button", { className: "btn", textContent: "Create folder", type: "button" });
+    folderBtn.onclick = () => run(folderBtn, async () => {
+      const name = cleanName(folderIn.value);
+      if (!name) throw new Error("Enter a folder name");
+      await createFolder([...currentPath, name].join("/"));
+      currentPath = [...currentPath, name];
+      await loadFiles();
+      showMsg("Folder created: " + name, true);
+    });
+    adminPanel.append(
+      el("h2", { textContent: "New folder" }),
+      el("div", { className: "row" }, folderIn, folderBtn)
+    );
+
+    // PDF upload
+    const pdfIn = el("input", { type: "file", accept: "application/pdf" });
+    const pdfName = el("input", { type: "text", placeholder: "PDF name (optional)" });
+    const upBtn = el("button", { className: "btn", textContent: "Upload PDF", type: "button" });
+    upBtn.onclick = () => run(upBtn, async () => {
+      const file = pdfIn.files[0];
+      if (!file) throw new Error("Select a PDF first");
+      if (file.size > 95 * 1024 * 1024) throw new Error("File is too large (max ~95MB)");
+
+      const base = cleanName(pdfName.value || file.name).replace(/\.pdf$/i, "").trim();
+      if (!base) throw new Error("Enter a PDF name");
+      const name = base + ".pdf";
+
+      await uploadPdf(file, [...currentPath, name].join("/"));
+      pdfIn.value = "";
+      pdfName.value = "";
+      await loadFiles();
+      showMsg("Uploaded: " + name, true);
+    });
+    adminPanel.append(
+      el("h2", { textContent: "Upload PDF to this folder" }),
+      el("div", { className: "row" }, pdfIn),
+      el("div", { className: "row" }, pdfName, upBtn)
+    );
+  }
+
+  adminMsg = el("div", { className: "hint" });
+  adminPanel.append(adminMsg);
+}
+
+searchEl.addEventListener("input", render);
