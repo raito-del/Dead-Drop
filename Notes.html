@@ -1,30 +1,64 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dead Drop · notes</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <main class="wrap">
-    <div class="top">
-      <h1>notes/</h1>
-      <span class="tag">storage: <span id="mode">…</span> · <a href="index.html">home</a></span>
-    </div>
+// Notes page: loads the right storage module, lists PDFs, handles search.
+import { MODE } from "./config.js";
 
-    <input id="search" type="search" placeholder="Search notes by name" aria-label="Search notes">
-    <p id="status" class="status"></p>
-    <ul id="list" class="files"></ul>
+const $ = (s) => document.querySelector(s);
+const listEl = $("#list");
+const statusEl = $("#status");
+const searchEl = $("#search");
+$("#mode").textContent = MODE;
 
-    <section id="uploader" class="uploader" aria-label="Upload"></section>
-  </main>
+const storage = await import(MODE === "firebase" ? "./firebase-mode.js" : "./github-mode.js");
+let files = [];
 
-  <footer class="site-footer">Made by Team BreakByte</footer>
+function formatSize(bytes) {
+  if (!bytes) return "";
+  return bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
+}
 
-  <script type="module" src="js/notes.js"></script>
-</body>
-</html>
+function render() {
+  const q = searchEl.value.trim().toLowerCase();
+  const shown = files.filter((f) => f.name.toLowerCase().includes(q));
+  listEl.replaceChildren();
+  statusEl.className = "status";
+  statusEl.textContent = shown.length ? "" : files.length ? "No notes match your search." : "No PDFs yet.";
+
+  for (const f of shown) {
+    const li = document.createElement("li");
+    li.className = "file";
+
+    const name = document.createElement("span");
+    name.className = "file-name";
+    name.textContent = f.name;
+
+    const size = document.createElement("span");
+    size.className = "file-size";
+    size.textContent = formatSize(f.size);
+
+    const link = document.createElement("a");
+    link.className = "btn ghost";
+    link.href = f.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Download";
+
+    li.append(name, size, link);
+    listEl.append(li);
+  }
+}
+
+async function load() {
+  statusEl.className = "status";
+  statusEl.textContent = "> loading…";
+  try {
+    files = await storage.listFiles();
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    render();
+  } catch (err) {
+    statusEl.className = "status error";
+    statusEl.textContent = "Could not load notes: " + err.message;
+  }
+}
+
+searchEl.addEventListener("input", render);
+storage.setupUploader($("#uploader"), load);
+load();
