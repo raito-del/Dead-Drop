@@ -17,7 +17,6 @@ let files = [];
 // ---------- লগইন গার্ড ----------
 watchAuth((user) => {
   if (!user) {
-    // লগইন নেই: কিছু না দেখিয়ে হোম পেজে পাঠাও
     location.replace("index.html");
     return;
   }
