@@ -1,6 +1,6 @@
 // ============================================
-//  Firebase Authentication (শুধু লগইনের জন্য)
-//  Firebase সরাসরি CDN থেকে লোড হয়, npm লাগে না
+//  Firebase Authentication (login only)
+//  Firebase loads directly from the CDN, no npm required
 // ============================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -14,12 +14,12 @@ import { FIREBASE, VIEWER_EMAIL, ADMIN_EMAIL } from "./config.js";
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
 
-// বন্ধুদের লগইন: শুধু পাসওয়ার্ড লাগে, ইমেইল কোড থেকে যায়
+// Viewer login: only a password is needed, the email is stored in code
 export function loginViewer(password) {
   return signInWithEmailAndPassword(auth, VIEWER_EMAIL, password);
 }
 
-// Admin লগইন: তোমার ইমেইল কোড থেকে যায়, শুধু পাসওয়ার্ড টাইপ করবে
+// Admin login: the admin email is stored in code, only the password is typed
 export function loginAdmin(password) {
   return signInWithEmailAndPassword(auth, ADMIN_EMAIL, password);
 }
@@ -28,7 +28,7 @@ export function logout() {
   return signOut(auth);
 }
 
-// লগইন অবস্থা বদলালে callback(user) চলবে (user না থাকলে null)
+// Calls callback(user) whenever the login state changes (user is null if logged out)
 export function watchAuth(callback) {
   return onAuthStateChanged(auth, callback);
 }
@@ -37,23 +37,23 @@ export function isAdmin(user) {
   return !!user && user.email === ADMIN_EMAIL;
 }
 
-// Firebase এররকে সহজ বাংলা মেসেজে বদলায়
+// Converts Firebase error codes into simple, user-friendly messages
 export function errorText(err) {
   switch (err && err.code) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
     case "auth/invalid-email":
-      return "ACCESS DENIED: ভুল পাসওয়ার্ড";
+      return "ACCESS DENIED: Wrong password";
     case "auth/too-many-requests":
-      return "অনেকবার ভুল হয়েছে, কিছুক্ষণ পর আবার চেষ্টা করো";
+      return "Too many failed attempts. Please try again later.";
     case "auth/network-request-failed":
-      return "ইন্টারনেট সংযোগ চেক করো";
+      return "Please check your internet connection.";
     case "auth/invalid-api-key":
-      return "config.js-এর apiKey ভুল আছে";
+      return "The apiKey in config.js is invalid.";
     case "auth/unauthorized-domain":
-      return "Firebase-এর Authorized domains-এ raito-del.github.io যোগ করো";
+      return "Add raito-del.github.io to Firebase Authorized domains.";
     default:
-      return "এরর: " + (err && err.code ? err.code : "অজানা সমস্যা");
+      return "Error: " + (err && err.code ? err.code : "Unknown error");
   }
 }
