@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,7 +19,7 @@
 
       <div id="typing-lines"></div>
 
-      <!-- পাসওয়ার্ড বক্স: টাইপ শেষ হলে typing.js এটা দেখাবে -->
+      <!-- Password box: typing.js shows this once the typing animation finishes -->
       <form id="gate" class="hidden" autocomplete="off">
         <div class="row">
           <input type="password" id="pw" placeholder="enter access key" required>
@@ -44,7 +44,7 @@
     const msg = document.getElementById("msg");
     const btn = document.getElementById("go");
 
-    // আগে থেকে লগইন করা থাকলে সরাসরি notes পেজে চলে যাবে
+    // If already logged in, go straight to the notes page
     watchAuth((user) => {
       if (user) location.href = "notes.html";
     });
