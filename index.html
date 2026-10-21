@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dead-Drop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="matrix"></canvas>
+
+  <main class="wrap center">
+    <div class="terminal">
+      <div class="terminal-bar">root@dead-drop:~$</div>
+
+      <h1>DEAD-DROP</h1>
+      <div class="hint">secure notes vault</div>
+      <br>
+
+      <div id="typing-lines"></div>
+
+      <!-- পাসওয়ার্ড বক্স: টাইপ শেষ হলে typing.js এটা দেখাবে -->
+      <form id="gate" class="hidden" autocomplete="off">
+        <div class="row">
+          <input type="password" id="pw" placeholder="enter access key" required>
+          <button type="submit" class="btn" id="go">Unlock</button>
+        </div>
+        <div class="error" id="msg"></div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    Made by Team <b>BreakByte</b>
+  </footer>
+
+  <script type="module" src="matrix.js"></script>
+  <script type="module" src="typing.js"></script>
+  <script type="module">
+    import { loginViewer, watchAuth, errorText } from "./auth.js";
+
+    const form = document.getElementById("gate");
+    const pw = document.getElementById("pw");
+    const msg = document.getElementById("msg");
+    const btn = document.getElementById("go");
+
+    // আগে থেকে লগইন করা থাকলে সরাসরি notes পেজে চলে যাবে
+    watchAuth((user) => {
+      if (user) location.href = "notes.html";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.textContent = "";
+      btn.disabled = true;
+      btn.textContent = "Checking...";
+      try {
+        await loginViewer(pw.value);
+        location.href = "notes.html";
+      } catch (err) {
+        msg.textContent = errorText(err);
+        pw.value = "";
+        btn.disabled = false;
+        btn.textContent = "Unlock";
+      }
+    });
+  </script>
+</body>
+</html>
