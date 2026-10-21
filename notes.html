@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,7 @@
   <canvas id="matrix"></canvas>
 
   <main class="wrap">
-    <!-- লগইন না থাকলে notes.js এটা দেখাবেই না -->
+    <!-- If not logged in, notes.js will not show this -->
     <div id="content" class="hidden">
 
       <div class="topbar">
@@ -27,7 +27,7 @@
         <div class="list" id="list"></div>
       </div>
 
-      <!-- Admin লগইন বক্স: Admin বাটনে চাপলে আসবে -->
+      <!-- Admin login box: appears when the Admin button is clicked -->
       <form id="admin-login" class="admin-panel hidden" autocomplete="off">
         <h2>admin access</h2>
         <div class="row">
@@ -37,10 +37,10 @@
         <div class="error" id="admin-msg"></div>
       </form>
 
-      <!-- Upload প্যানেল: শুধু admin লগইন করলে দেখা যাবে -->
+      <!-- Upload panel: only visible after admin login -->
       <div id="admin-panel" class="admin-panel hidden">
         <h2>admin: upload pdf</h2>
-        <div class="hint">GitHub-এর পেজে PDF ড্র্যাগ করে ফেলো, তারপর Commit changes চাপো।</div>
+        <div class="hint">Drag the PDF onto the GitHub page, then click Commit changes.</div>
         <div class="row">
           <button class="btn" id="upload-btn">Open GitHub Upload</button>
         </div>
@@ -70,7 +70,7 @@
       msg.textContent = "";
       try {
         await loginAdmin(pw.value);
-        // সফল হলে notes.js নিজে থেকেই Upload প্যানেল দেখাবে
+        // On success, notes.js shows the upload panel automatically
         pw.value = "";
         form.classList.add("hidden");
       } catch (err) {
