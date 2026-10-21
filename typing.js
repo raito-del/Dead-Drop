@@ -1,13 +1,13 @@
 // ============================================
 //  Terminal typing effect
-//  index.html-এ id="typing-lines" আর id="gate" থাকতে হবে
+//  index.html must have id="typing-lines" and id="gate"
 // ============================================
 import { SITE_NAME } from "./config.js";
 
 const box = document.getElementById("typing-lines");
 const gate = document.getElementById("gate");
 
-// এখানে লাইন বদলে নিজের মতো করতে পারো
+// Change these lines to whatever you like
 const lines = [
   "> booting " + SITE_NAME.toLowerCase() + " ...",
   "> establishing secure connection ...",
@@ -15,8 +15,8 @@ const lines = [
   "> access restricted. authentication required.",
 ];
 
-const SPEED = 35;   // প্রতি অক্ষরের মিলিসেকেন্ড
-const PAUSE = 350;  // এক লাইন শেষে বিরতি
+const SPEED = 35;   // milliseconds per character
+const PAUSE = 350;  // pause after each line
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
