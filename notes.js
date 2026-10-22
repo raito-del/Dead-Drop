@@ -139,6 +139,7 @@ async function loadFiles() {
 function render() {
   const q = searchEl.value.trim().toLowerCase();
   listEl.innerHTML = "";
+  closeViewer();
 
   if (q) {
     crumbsEl.textContent = "Search results (from all folders)";
@@ -213,6 +214,9 @@ function folderRow(name, count) {
 }
 
 function fileRow(f, label) {
+  const read = el("button", { className: "btn", textContent: "Read", type: "button" });
+  read.addEventListener("click", () => openViewer(f));
+
   const dl = el("a", { className: "btn", textContent: "Download" });
   dl.href = rawUrl(f.path);
   dl.target = "_blank";
@@ -224,7 +228,39 @@ function fileRow(f, label) {
     el("div", { className: "file-name", textContent: f.name.replace(/\.pdf$/i, "") }),
     el("div", { className: "file-meta", textContent: meta })
   );
-  return el("div", { className: "file" }, info, dl);
+  const actions = el("div", { style: "display:flex; gap:8px; flex-wrap:wrap;" }, read, dl);
+  return el("div", { className: "file" }, info, actions);
+}
+
+// ---------- PDF viewer (shows the PDF inside the site) ----------
+function closeViewer() {
+  const old = document.getElementById("pdf-viewer");
+  if (old) old.remove();
+}
+
+function openViewer(f) {
+  closeViewer();
+
+  const box = el("div", { id: "pdf-viewer", className: "admin-panel" });
+  const close = el("button", { className: "btn ghost", textContent: "Close", type: "button" });
+  close.addEventListener("click", closeViewer);
+
+  // pdf.js viewer: it can display PDFs from GitHub raw links
+  const viewerUrl =
+    "https://mozilla.github.io/pdf.js/web/viewer.html?file=" + encodeURIComponent(rawUrl(f.path));
+  const frame = el("iframe", { src: viewerUrl });
+  frame.style.cssText = "width:100%; height:70vh; border:0; background:#000; margin-top:12px;";
+
+  box.append(
+    el("div", { style: "display:flex; justify-content:space-between; align-items:center; gap:10px;" },
+      el("h2", { textContent: f.name.replace(/\.pdf$/i, ""), style: "margin:0;" }),
+      close
+    ),
+    frame
+  );
+
+  listEl.after(box);
+  box.scrollIntoView({ behavior: "smooth" });
 }
 
 // ---------- admin panel ----------
