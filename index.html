@@ -127,4 +127,87 @@
  if (hasEnrolledFace()) {
  openFace("verify");
  } else {
- showPassword("Enter the access key to start. The first person added will be
+ showPassword("Enter the access key to start. The first person added will be you.", "start");
+ }
+ }
+
+ // Start only after typing.js has shown the gate
+ const observer = new MutationObserver(() => {
+ if (!gate.classList.contains("hidden")) {
+ observer.disconnect();
+ init();
+ }
+ });
+ observer.observe(gate, { attributes: true, attributeFilter: ["class"] });
+
+ faceBtn.addEventListener("click", async () => {
+ faceBtn.disabled = true;
+ try {
+ if (mode === "enroll") {
+ faceMsg.textContent = "Scanning your face...";
+ const name = await enrollFace(video, faceName.value);
+ goNotes(name);
+ return;
+ }
+
+ faceMsg.textContent = "Checking...";
+ const who = await verifyFace(video);
+ if (who) {
+ goNotes(who);
+ return;
+ }
+
+ attempts++;
+ if (attempts >= 3) {
+ showPassword("Face not recognized. Enter the access key.", "fallback");
+ } else {
+ faceMsg.textContent = "Face not recognized. Try again (" + attempts + "/3).";
+ }
+ } catch (err) {
+ faceMsg.textContent = "Error: " + err.message;
+ } finally {
+ faceBtn.disabled = false;
+ }
+ });
+
+ addBtn.addEventListener("click", () => {
+ if (!canAddPerson()) {
+ faceMsg.textContent = "5 people are already added in this browser.";
+ return;
+ }
+ showPassword("Enter the access key to add a new person.", "add");
+ });
+
+ usePwBtn.addEventListener("click", () => showPassword("", "fallback"));
+
+ pwForm.addEventListener("submit", async (e) => {
+ e.preventDefault();
+ pwMsg.textContent = "";
+ pwBtn.disabled = true;
+ pwBtn.textContent = "Checking...";
+ try {
+ await loginViewer(pw.value);
+ pw.value = "";
+
+ if (pwIntent === "add") {
+ if (canAddPerson()) {
+ await openFace("enroll");
+ } else {
+ goNotes("password");
+ }
+ } else if (!hasEnrolledFace()) {
+ await openFace("enroll");
+ } else {
+ goNotes("password");
+ }
+ } catch (err) {
+ pwMsg.textContent = errorText(err);
+ pw.value = "";
+ } finally {
+ pwBtn.disabled = false;
+ pwBtn.textContent = "Unlock";
+ }
+ });
+ </script>
+</body>
+</html>
