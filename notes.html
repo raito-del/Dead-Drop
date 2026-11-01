@@ -1,82 +1,185 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dead-Drop | Notes</title>
-  <link rel="stylesheet" href="style.css">
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Dead-Drop | Notes</title>
+ <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="matrix"></canvas>
+ <canvas id="matrix"></canvas>
 
-  <main class="wrap">
-    <!-- If not logged in, notes.js will not show this -->
-    <div id="content" class="hidden">
+ <main class="wrap">
+ <div id="content" class="hidden">
 
-      <div class="topbar">
-        <h2>root@dead-drop:~/notes$</h2>
-        <div class="row" style="margin-top:0">
-          <button class="btn" id="admin-toggle">Admin</button>
-          <button class="btn" id="logout">Logout</button>
-        </div>
-      </div>
+ <div class="topbar">
+ <h2>root@dead-drop:~/notes$</h2>
+ <div class="row" style="margin-top:0">
+ <button class="btn" id="admin-toggle">Admin</button>
+ <button class="btn" id="logout">Logout</button>
+ </div>
+ </div>
 
-      <div class="terminal">
-        <input type="search" id="search" placeholder="search notes...">
-        <div class="hint" id="status"></div>
-        <div class="list" id="list"></div>
-      </div>
+ <div class="terminal">
+ <div class="row" style="margin-top:0">
+ <input type="search" id="search" placeholder="search notes...">
+ <select id="sort" class="sort-select">
+ <option value="name">Sort: Name A-Z</option>
+ <option value="name-desc">Sort: Name Z-A</option>
+ <option value="size">Sort: Largest first</option>
+ </select>
+ </div>
+ <div class="hint" id="status"></div>
+ <div class="list" id="list"></div>
+ </div>
 
-      <!-- Admin login box: appears when the Admin button is clicked -->
-      <form id="admin-login" class="admin-panel hidden" autocomplete="off">
-        <h2>admin access</h2>
-        <div class="row">
-          <input type="password" id="admin-pw" placeholder="admin password" required>
-          <button type="submit" class="btn">Login</button>
-        </div>
-        <div class="error" id="admin-msg"></div>
-      </form>
+ <section class="admin-panel ai-panel">
+ <h2>ai study assistant</h2>
+ <div class="hint">Ask a question about your notes. Only logged-in members can use this.</div>
+ <form id="ai-form" autocomplete="off">
+ <textarea id="ai-input" rows="3" maxlength="2000" placeholder="ask something..."></textarea>
+ <div class="row">
+ <button class="btn" id="ai-send" type="submit">Ask AI</button>
+ </div>
+ </form>
+ <div class="ai-answer" id="ai-answer"></div>
+ </section>
 
-      <!-- Upload panel: only visible after admin login -->
-      <div id="admin-panel" class="admin-panel hidden">
-        <h2>admin: upload pdf</h2>
-        <div class="hint">Drag the PDF onto the GitHub page, then click Commit changes.</div>
-        <div class="row">
-          <button class="btn" id="upload-btn">Open GitHub Upload</button>
-        </div>
-      </div>
+ <!-- Admin login box: appears when the Admin button is clicked -->
+ <form id="admin-login" class="admin-panel hidden" autocomplete="off">
+ <h2>admin access</h2>
+ <div class="row">
+ <input type="password" id="admin-pw" placeholder="admin password" required>
+ <button type="submit" class="btn">Login</button>
+ </div>
+ <div class="error" id="admin-msg"></div>
+ </form>
 
-    </div>
-  </main>
+ <!-- Face check: appears after a correct admin password -->
+ <section id="face-box" class="admin-panel hidden">
+ <h2>face check</h2>
+ <video id="face-video" width="320" height="240" autoplay muted playsinline
+ style="width:100%; max-width:320px; border:1px solid #12401f; border-radius:4px; background:#000;"></video>
+ <div class="hint" id="face-msg"></div>
+ <div class="row">
+ <button class="btn" id="face-action" type="button">Verify</button>
+ <button class="btn ghost" id="face-cancel" type="button">Cancel</button>
+ </div>
+ </section>
 
-  <footer class="site-footer">
-    Made by Team <b>BreakByte</b>
-  </footer>
+ <!-- Upload panel: only visible after admin login and face check -->
+ <div id="admin-panel" class="admin-panel hidden">
+ <h2>admin: upload pdf</h2>
+ <div class="hint">Drag the PDF onto the GitHub page, then click Commit changes.</div>
+ <div class="row">
+ <button class="btn" id="upload-btn">Open GitHub Upload</button>
+ </div>
+ </div>
 
-  <script type="module" src="matrix.js"></script>
-  <script type="module" src="notes.js"></script>
-  <script type="module">
-    import { loginAdmin, errorText } from "./auth.js";
+ </div>
+ </main>
 
-    const toggle = document.getElementById("admin-toggle");
-    const form = document.getElementById("admin-login");
-    const pw = document.getElementById("admin-pw");
-    const msg = document.getElementById("admin-msg");
+ <!-- KEEP YOUR ORIGINAL FOOTER HERE (Arabic and Bangla quote lines + "Made by Team BreakByte") -->
+ <footer class="site-footer">
+ </footer>
 
-    toggle.addEventListener("click", () => form.classList.toggle("hidden"));
+ <script type="module" src="matrix.js"></script>
+ <script type="module" src="notes.js"></script>
+ <script type="module">
+ import { loginAdmin, errorText, logout } from "./auth.js";
+ import { hasEnrolledFace, startCamera, stopCamera, enrollFace, verifyFace } from "./face.js";
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      msg.textContent = "";
-      try {
-        await loginAdmin(pw.value);
-        // On success, notes.js shows the upload panel automatically
-        pw.value = "";
-        form.classList.add("hidden");
-      } catch (err) {
-        msg.textContent = errorText(err);
-      }
-    });
-  </script>
+ const toggle = document.getElementById("admin-toggle");
+ const form = document.getElementById("admin-login");
+ const pw = document.getElementById("admin-pw");
+ const msg = document.getElementById("admin-msg");
+
+ const box = document.getElementById("face-box");
+ const video = document.getElementById("face-video");
+ const faceMsg = document.getElementById("face-msg");
+ const faceBtn = document.getElementById("face-action");
+ const faceCancel = document.getElementById("face-cancel");
+
+ let stream = null;
+ let mode = "verify";
+ let attempts = 0;
+
+ toggle.addEventListener("click", () => form.classList.toggle("hidden"));
+
+ // Face check passed: allow the admin panel and tell notes.js to show it
+ function finishFaceCheck() {
+ sessionStorage.setItem("dd_face_ok", "1");
+ stopCamera(stream);
+ box.classList.add("hidden");
+ window.dispatchEvent(new Event("face-ok"));
+ }
+
+ // Cancel or too many failures: sign out and go back to the home page
+ async function cancelFaceCheck() {
+ stopCamera(stream);
+ box.classList.add("hidden");
+ sessionStorage.removeItem("dd_face_ok");
+ await logout();
+ location.replace("index.html");
+ }
+
+ async function openFaceCheck() {
+ mode = hasEnrolledFace() ? "verify" : "enroll";
+ attempts = 0;
+ box.classList.remove("hidden");
+ faceBtn.textContent = mode === "enroll" ? "Enroll my face" : "Verify";
+ faceMsg.textContent = mode === "enroll"
+ ? "First time: look straight at the camera, then click Enroll my face."
+ : "Look at the camera, then click Verify.";
+ try {
+ stream = await startCamera(video);
+ } catch {
+ faceMsg.textContent = "Camera is not available. Allow camera access and try again.";
+ }
+ }
+
+ faceBtn.addEventListener("click", async () => {
+ faceBtn.disabled = true;
+ try {
+ if (mode === "enroll") {
+ faceMsg.textContent = "Scanning your face...";
+ await enrollFace(video);
+ finishFaceCheck();
+ } else {
+ faceMsg.textContent = "Checking...";
+ if (await verifyFace(video)) {
+ finishFaceCheck();
+ } else {
+ attempts++;
+ if (attempts >= 3) {
+ faceMsg.textContent = "Face not recognized. Logging out.";
+ await cancelFaceCheck();
+ } else {
+ faceMsg.textContent = "Face not recognized. Try again (" + attempts + "/3).";
+ }
+ }
+ }
+ } catch (err) {
+ faceMsg.textContent = "Error: " + err.message;
+ } finally {
+ faceBtn.disabled = false;
+ }
+ });
+
+ faceCancel.addEventListener("click", cancelFaceCheck);
+
+ form.addEventListener("submit", async (e) => {
+ e.preventDefault();
+ msg.textContent = "";
+ try {
+ await loginAdmin(pw.value);
+ pw.value = "";
+ form.classList.add("hidden");
+ await openFaceCheck();
+ } catch (err) {
+ msg.textContent = errorText(err);
+ }
+ });
+ </script>
 </body>
 </html>
