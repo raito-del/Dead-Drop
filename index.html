@@ -24,8 +24,23 @@
  <div id="name-row" class="row hidden" style="margin-top:0">
  <input type="text" id="face-name" placeholder="your name (e.g. rahim)" maxlength="40">
  </div>
+
  <video id="face-video" width="320" height="240" autoplay muted playsinline
  style="width:100%; max-width:320px; border:1px solid #12401f; border-radius:4px; background:#000; margin-top:12px;"></video>
+
+ <!-- Enrollment steps: green tick appears when each pose is captured -->
+ <div id="steps" class="hidden" style="display:flex; justify-content:space-between; gap:8px; margin-top:12px;">
+ <div class="step" data-step="0"><span class="tick">○</span> Front</div>
+ <div class="step" data-step="1"><span class="tick">○</span> Left</div>
+ <div class="step" data-step="2"><span class="tick">○</span> Right</div>
+ </div>
+
+ <!-- Match meter for verification -->
+ <div id="meter-wrap" style="margin-top:12px; height:14px; border:1px solid var(--border); border-radius:4px; background:#000; overflow:hidden;">
+ <div id="meter-fill" style="height:100%; width:0%; background:var(--accent); transition:width 0.3s;"></div>
+ </div>
+ <div id="meter-text" class="hint" style="text-align:center;">0%</div>
+
  <div class="hint" id="face-msg"></div>
  <div class="row">
  <button class="btn" id="face-action" type="button">Verify</button>
@@ -83,11 +98,45 @@
  const pw = $("pw");
  const pwMsg = $("msg");
  const pwBtn = $("go");
+ const stepsBox = $("steps");
+ const meterWrap = $("meter-wrap");
+ const meterFill = $("meter-fill");
+ const meterText = $("meter-text");
 
  let stream = null;
  let mode = "verify";    // "verify" or "enroll"
  let attempts = 0;
  let pwIntent = "start"; // "start", "add", or "fallback"
+
+ // Verify bar: percent 0 to 100
+ function setMeter(percent, text) {
+ meterFill.style.width = Math.max(0, Math.min(100, percent)) + "%";
+ meterText.textContent = text || (Math.round(percent) + "%");
+ }
+
+ // Enrollment ticks: mark each pose as done
+ function setStep(index, state) {
+ const node = stepsBox.querySelector('[data-step="' + index + '"]');
+ if (!node) return;
+ const tick = node.querySelector(".tick");
+ if (state === "ok") {
+ tick.textContent = "✔";
+ tick.style.color = "var(--accent)";
+ node.style.color = "var(--accent)";
+ } else if (state === "fail") {
+ tick.textContent = "✖";
+ tick.style.color = "var(--danger)";
+ node.style.color = "var(--danger)";
+ } else {
+ tick.textContent = "○";
+ tick.style.color = "";
+ node.style.color = "";
+ }
+ }
+
+ function resetSteps() {
+ for (let i = 0; i < 3; i++) setStep(i, "wait");
+ }
 
  // Opens notes.html. who = matched name, or "password" for password-only access
  function goNotes(who) {
@@ -111,10 +160,15 @@
  pwForm.classList.add("hidden");
  faceBox.classList.remove("hidden");
  nameRow.classList.toggle("hidden", m !== "enroll");
+ stepsBox.classList.toggle("hidden", m !== "enroll");
+ meterWrap.classList.toggle("hidden", m === "enroll");
+ meterText.classList.toggle("hidden", m === "enroll");
  faceName.value = "";
- faceBtn.textContent = m === "enroll" ? "Enroll this face" : "Verify";
+ resetSteps();
+ setMeter(0, "0%");
+ faceBtn.textContent = m === "enroll" ? "Start enrollment" : "Verify";
  faceMsg.textContent = m === "enroll"
- ? "Type a name, look straight at the camera, then click Enroll this face."
+ ? "Type a name, then click Start enrollment and follow the steps."
  : "Look at the camera, then click Verify.";
  try {
  stream = await startCamera(video);
@@ -144,16 +198,23 @@
  faceBtn.disabled = true;
  try {
  if (mode === "enroll") {
- faceMsg.textContent = "Scanning your face...";
- const name = await enrollFace(video, faceName.value);
- goNotes(name);
+ resetSteps();
+ faceMsg.textContent = "Follow the steps: front, then left, then right.";
+ const name = await enrollFace(video, faceName.value, (p) => {
+ if (p.state === "ok") setStep(p.index, "ok");
+ if (p.state === "fail") setStep(p.index, "fail");
+ faceMsg.textContent = p.label + ": " + p.text;
+ });
+ faceMsg.textContent = "All steps done. Opening notes...";
+ setTimeout(() => goNotes(name), 700);
  return;
  }
 
  faceMsg.textContent = "Checking...";
- const who = await verifyFace(video);
+ const who = await verifyFace(video, null, (p) => setMeter(p.percent, p.text));
  if (who) {
- goNotes(who);
+ faceMsg.textContent = "Welcome, " + who + ". Opening notes...";
+ setTimeout(() => goNotes(who), 600);
  return;
  }
 
