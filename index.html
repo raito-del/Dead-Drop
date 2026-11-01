@@ -18,46 +18,13 @@
  <div id="typing-lines"></div>
 
  <div id="gate" class="hidden">
-
- <!-- Face check -->
- <section id="face-gate" class="hidden">
- <div id="name-row" class="row hidden" style="margin-top:0">
- <input type="text" id="face-name" placeholder="your name (e.g. rahim)" maxlength="40">
- </div>
-
- <video id="face-video" width="320" height="240" autoplay muted playsinline
- style="width:100%; max-width:320px; border:1px solid #12401f; border-radius:4px; background:#000; margin-top:12px;"></video>
-
- <!-- Enrollment steps: green tick appears when each pose is captured -->
- <div id="steps" class="hidden" style="display:flex; justify-content:space-between; gap:8px; margin-top:12px;">
- <div class="step" data-step="0"><span class="tick">○</span> Front</div>
- <div class="step" data-step="1"><span class="tick">○</span> Left</div>
- <div class="step" data-step="2"><span class="tick">○</span> Right</div>
- </div>
-
- <!-- Match meter for verification -->
- <div id="meter-wrap" style="margin-top:12px; height:14px; border:1px solid var(--border); border-radius:4px; background:#000; overflow:hidden;">
- <div id="meter-fill" style="height:100%; width:0%; background:var(--accent); transition:width 0.3s;"></div>
- </div>
- <div id="meter-text" class="hint" style="text-align:center;">0%</div>
-
- <div class="hint" id="face-msg"></div>
- <div class="row">
- <button class="btn" id="face-action" type="button">Verify</button>
- <button class="btn ghost" id="add-person" type="button">Add another person</button>
- <button class="btn ghost" id="use-pw" type="button">Use password instead</button>
- </div>
- </section>
-
- <!-- Access key form -->
- <form id="pw-form" class="hidden" autocomplete="off">
+ <form id="pw-form" autocomplete="off">
  <div class="row">
  <input type="password" id="pw" placeholder="enter access key" required>
  <button type="submit" class="btn" id="go">Unlock</button>
  </div>
  <div class="error" id="msg"></div>
  </form>
-
  </div>
  </div>
  </main>
@@ -71,202 +38,41 @@
  <script type="module" src="matrix.js"></script>
  <script type="module" src="typing.js"></script>
  <script type="module">
- import { loginViewer, errorText } from "./auth.js";
- import {
- hasEnrolledFace, canAddPerson, startCamera, stopCamera,
- enrollFace, verifyFace, getProfiles, removePerson, clearAllFaces
- } from "./face.js";
+ import { loginViewer, watchAuth, errorText } from "./auth.js";
 
- // Console helpers: ddFace.list(), ddFace.remove("rahim"), ddFace.clearAll()
- window.ddFace = {
- list: () => getProfiles().map((p) => p.name),
- remove: (name) => { removePerson(name); return "removed " + name; },
- clearAll: () => { clearAllFaces(); return "all faces cleared"; },
- };
+ const form = document.getElementById("pw-form");
+ const pw = document.getElementById("pw");
+ const msg = document.getElementById("msg");
+ const btn = document.getElementById("go");
 
- const $ = (id) => document.getElementById(id);
- const gate = $("gate");
- const faceBox = $("face-gate");
- const nameRow = $("name-row");
- const faceName = $("face-name");
- const video = $("face-video");
- const faceMsg = $("face-msg");
- const faceBtn = $("face-action");
- const addBtn = $("add-person");
- const usePwBtn = $("use-pw");
- const pwForm = $("pw-form");
- const pw = $("pw");
- const pwMsg = $("msg");
- const pwBtn = $("go");
- const stepsBox = $("steps");
- const meterWrap = $("meter-wrap");
- const meterFill = $("meter-fill");
- const meterText = $("meter-text");
+ // If already logged in, go straight to the notes page
+ watchAuth((user) => {
+ if (user) location.href = "notes.html";
+ });
 
- let stream = null;
- let mode = "verify";    // "verify" or "enroll"
- let attempts = 0;
- let pwIntent = "start"; // "start", "add", or "fallback"
-
- // Verify bar: percent 0 to 100
- function setMeter(percent, text) {
- meterFill.style.width = Math.max(0, Math.min(100, percent)) + "%";
- meterText.textContent = text || (Math.round(percent) + "%");
- }
-
- // Enrollment ticks: mark each pose as done
- function setStep(index, state) {
- const node = stepsBox.querySelector('[data-step="' + index + '"]');
- if (!node) return;
- const tick = node.querySelector(".tick");
- if (state === "ok") {
- tick.textContent = "✔";
- tick.style.color = "var(--accent)";
- node.style.color = "var(--accent)";
- } else if (state === "fail") {
- tick.textContent = "✖";
- tick.style.color = "var(--danger)";
- node.style.color = "var(--danger)";
- } else {
- tick.textContent = "○";
- tick.style.color = "";
- node.style.color = "";
- }
- }
-
- function resetSteps() {
- for (let i = 0; i < 3; i++) setStep(i, "wait");
- }
-
- // Opens notes.html. who = matched name, or "password" for password-only access
- function goNotes(who) {
- sessionStorage.setItem("dd_face_ok", "1");
- sessionStorage.setItem("dd_who", who || "member");
- location.href = "notes.html";
- }
-
- function showPassword(note, intent) {
- pwIntent = intent;
- stopCamera(stream);
- faceBox.classList.add("hidden");
- pwForm.classList.remove("hidden");
- pwMsg.textContent = note;
- pw.focus();
- }
-
- async function openFace(m) {
- mode = m;
- attempts = 0;
- pwForm.classList.add("hidden");
- faceBox.classList.remove("hidden");
- nameRow.classList.toggle("hidden", m !== "enroll");
- stepsBox.classList.toggle("hidden", m !== "enroll");
- meterWrap.classList.toggle("hidden", m === "enroll");
- meterText.classList.toggle("hidden", m === "enroll");
- faceName.value = "";
- resetSteps();
- setMeter(0, "0%");
- faceBtn.textContent = m === "enroll" ? "Start enrollment" : "Verify";
- faceMsg.textContent = m === "enroll"
- ? "Type a name, then click Start enrollment and follow the steps."
- : "Look at the camera, then click Verify.";
- try {
- stream = await startCamera(video);
- } catch {
- faceMsg.textContent = "Camera is not available. Allow camera access or use the password.";
- }
- }
-
- function init() {
- if (hasEnrolledFace()) {
- openFace("verify");
- } else {
- showPassword("Enter the access key to start. The first person added will be you.", "start");
- }
- }
-
- // Start only after typing.js has shown the gate
+ // Show the access key box after the typing animation
+ const gate = document.getElementById("gate");
  const observer = new MutationObserver(() => {
  if (!gate.classList.contains("hidden")) {
  observer.disconnect();
- init();
+ pw.focus();
  }
  });
  observer.observe(gate, { attributes: true, attributeFilter: ["class"] });
 
- faceBtn.addEventListener("click", async () => {
- faceBtn.disabled = true;
- try {
- if (mode === "enroll") {
- resetSteps();
- faceMsg.textContent = "Follow the steps: front, then left, then right.";
- const name = await enrollFace(video, faceName.value, (p) => {
- if (p.state === "ok") setStep(p.index, "ok");
- if (p.state === "fail") setStep(p.index, "fail");
- faceMsg.textContent = p.label + ": " + p.text;
- });
- faceMsg.textContent = "All steps done. Opening notes...";
- setTimeout(() => goNotes(name), 700);
- return;
- }
-
- faceMsg.textContent = "Checking...";
- const who = await verifyFace(video, null, (p) => setMeter(p.percent, p.text));
- if (who) {
- faceMsg.textContent = "Welcome, " + who + ". Opening notes...";
- setTimeout(() => goNotes(who), 600);
- return;
- }
-
- attempts++;
- if (attempts >= 3) {
- showPassword("Face not recognized. Enter the access key.", "fallback");
- } else {
- faceMsg.textContent = "Face not recognized. Try again (" + attempts + "/3).";
- }
- } catch (err) {
- faceMsg.textContent = "Error: " + err.message;
- } finally {
- faceBtn.disabled = false;
- }
- });
-
- addBtn.addEventListener("click", () => {
- if (!canAddPerson()) {
- faceMsg.textContent = "5 people are already added in this browser.";
- return;
- }
- showPassword("Enter the access key to add a new person.", "add");
- });
-
- usePwBtn.addEventListener("click", () => showPassword("", "fallback"));
-
- pwForm.addEventListener("submit", async (e) => {
+ form.addEventListener("submit", async (e) => {
  e.preventDefault();
- pwMsg.textContent = "";
- pwBtn.disabled = true;
- pwBtn.textContent = "Checking...";
+ msg.textContent = "";
+ btn.disabled = true;
+ btn.textContent = "Checking...";
  try {
  await loginViewer(pw.value);
- pw.value = "";
-
- if (pwIntent === "add") {
- if (canAddPerson()) {
- await openFace("enroll");
- } else {
- goNotes("password");
- }
- } else if (!hasEnrolledFace()) {
- await openFace("enroll");
- } else {
- goNotes("password");
- }
+ location.href = "notes.html";
  } catch (err) {
- pwMsg.textContent = errorText(err);
+ msg.textContent = errorText(err);
  pw.value = "";
- } finally {
- pwBtn.disabled = false;
- pwBtn.textContent = "Unlock";
+ btn.disabled = false;
+ btn.textContent = "Unlock";
  }
  });
  </script>

@@ -21,29 +21,10 @@
  </div>
 
  <div class="terminal">
- <div class="row" style="margin-top:0">
  <input type="search" id="search" placeholder="search notes...">
- <select id="sort" class="sort-select">
- <option value="name">Sort: Name A-Z</option>
- <option value="name-desc">Sort: Name Z-A</option>
- <option value="size">Sort: Largest first</option>
- </select>
- </div>
  <div class="hint" id="status"></div>
  <div class="list" id="list"></div>
  </div>
-
- <section class="admin-panel ai-panel">
- <h2>ai study assistant</h2>
- <div class="hint">Ask a question about your notes. Only logged-in members can use this.</div>
- <form id="ai-form" autocomplete="off">
- <textarea id="ai-input" rows="3" maxlength="2000" placeholder="ask something..."></textarea>
- <div class="row">
- <button class="btn" id="ai-send" type="submit">Ask AI</button>
- </div>
- </form>
- <div class="ai-answer" id="ai-answer"></div>
- </section>
 
  <!-- Admin login box: appears when the Admin button is clicked -->
  <form id="admin-login" class="admin-panel hidden" autocomplete="off">
@@ -55,19 +36,7 @@
  <div class="error" id="admin-msg"></div>
  </form>
 
- <!-- Admin face check: appears after a correct admin password -->
- <section id="face-box" class="admin-panel hidden">
- <h2>face check</h2>
- <video id="face-video" width="320" height="240" autoplay muted playsinline
- style="width:100%; max-width:320px; border:1px solid #12401f; border-radius:4px; background:#000;"></video>
- <div class="hint" id="face-msg"></div>
- <div class="row">
- <button class="btn" id="face-action" type="button">Verify</button>
- <button class="btn ghost" id="face-cancel" type="button">Cancel</button>
- </div>
- </section>
-
- <!-- Upload panel: only visible after admin login and face check -->
+ <!-- Upload panel: only visible after admin login -->
  <div id="admin-panel" class="admin-panel hidden">
  <h2>admin: upload pdf</h2>
  <div class="hint">Drag the PDF onto the GitHub page, then click Commit changes.</div>
@@ -88,78 +57,13 @@
  <script type="module" src="matrix.js"></script>
  <script type="module" src="notes.js"></script>
  <script type="module">
- import { loginAdmin, errorText, logout } from "./auth.js";
- import { hasEnrolledFace, startCamera, stopCamera, enrollFace, verifyFace } from "./face.js";
-
+ import { loginAdmin, errorText } from "./auth.js";
  const toggle = document.getElementById("admin-toggle");
  const form = document.getElementById("admin-login");
  const pw = document.getElementById("admin-pw");
  const msg = document.getElementById("admin-msg");
 
- const box = document.getElementById("face-box");
- const video = document.getElementById("face-video");
- const faceMsg = document.getElementById("face-msg");
- const faceBtn = document.getElementById("face-action");
- const faceCancel = document.getElementById("face-cancel");
-
- let stream = null;
- let attempts = 0;
-
  toggle.addEventListener("click", () => form.classList.toggle("hidden"));
-
- // Face check passed: allow the admin panel and tell notes.js to show it
- function finishFaceCheck() {
- sessionStorage.setItem("dd_face_ok", "1");
- stopCamera(stream);
- box.classList.add("hidden");
- window.dispatchEvent(new Event("face-ok"));
- }
-
- // Cancel or too many failures: sign out and go back to the home page
- async function cancelFaceCheck() {
- stopCamera(stream);
- box.classList.add("hidden");
- sessionStorage.removeItem("dd_face_ok");
- await logout();
- location.replace("index.html");
- }
-
- async function openFaceCheck() {
- attempts = 0;
- box.classList.remove("hidden");
- faceBtn.textContent = "Verify";
- faceMsg.textContent = "Look at the camera, then click Verify.";
- try {
- stream = await startCamera(video);
- } catch {
- faceMsg.textContent = "Camera is not available. Allow camera access and try again.";
- }
- }
-
- faceBtn.addEventListener("click", async () => {
- faceBtn.disabled = true;
- try {
- faceMsg.textContent = "Checking...";
- // Only the admin's own face is accepted here
- if (await verifyFace(video, "admin")) {
- finishFaceCheck();
- return;
- }
- attempts++;
- if (attempts >= 3) {
- faceMsg.textContent = "Face not recognized. Logging out.";
- await cancelFaceCheck();
- } else {
- faceMsg.textContent = "Face not recognized. Try again (" + attempts + "/3).";
- }
- } catch (err) {
- faceMsg.textContent = "Error: " + err.message;
- } finally {
- faceBtn.disabled = false;
- }
- });
-
- faceCancel.addEventListener("click", cancelFaceCheck);
 
  form.addEventListener("submit", async (e) => {
  e.preventDefault();
@@ -168,7 +72,6 @@
  await loginAdmin(pw.value);
  pw.value = "";
  form.classList.add("hidden");
- await openFaceCheck();
  } catch (err) {
  msg.textContent = errorText(err);
  }

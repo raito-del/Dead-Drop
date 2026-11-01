@@ -1,5 +1,5 @@
 // ============================================
-// Notes page: face guard, folder view, search, sort, admin
+// Notes page: login check, folder view, search, admin
 // ============================================
 import { GITHUB } from "./config.js";
 import { watchAuth, logout, isAdmin } from "./auth.js";
@@ -8,7 +8,6 @@ import { getToken, saveToken, clearToken, createFolder, uploadPdf } from "./gith
 const $ = (id) => document.getElementById(id);
 const listEl = $("list");
 const searchEl = $("search");
-const sortEl = $("sort");
 const statusEl = $("status");
 const content = $("content");
 const adminPanel = $("admin-panel");
@@ -23,9 +22,7 @@ let allFolders = [];  // [["first-year"], ["first-year", "cp-2"]]
 let currentPath = []; // the folder the user is currently in
 let isAdminUser = false;
 let adminMsg = null;
-let filesLoaded = false;
 
-// ---------- helper ----------
 const el = (tag, props = {}, ...kids) => {
  const n = document.createElement(tag);
  Object.assign(n, props);
@@ -33,7 +30,6 @@ const el = (tag, props = {}, ...kids) => {
  return n;
 };
 
-// Remove characters from folder/file names that GitHub does not allow
 function cleanName(s) {
  return s
  .replace(/[\/\\:*?"<>|]/g, "")
@@ -43,7 +39,6 @@ function cleanName(s) {
  .slice(0, 120);
 }
 
-// Is segs inside path (or exactly at it)?
 const under = (segs, path) => path.every((p, i) => segs[i] === p);
 
 function sizeText(bytes) {
@@ -76,121 +71,56 @@ async function run(btn, fn) {
  }
 }
 
-// Sort the file list according to the dropdown
-function sortFiles(list) {
- const mode = sortEl ? sortEl.value : "name";
- return [...list].sort((a, b) => {
- if (mode === "size") return b.size - a.size;
- if (mode === "name-desc") return b.name.localeCompare(a.name);
- return a.name.localeCompare(b.name);
- });
-}
-
 // ---------- guard ----------
 watchAuth((user) => {
- if (sessionStorage.getItem("dd_face_ok") !== "1") {
- location.replace("index.html");
- return;
- }
+ if (!user) { location.replace("index.html"); return; }
  content.classList.remove("hidden");
  isAdminUser = isAdmin(user);
  renderAdmin();
- if (!filesLoaded) {
- filesLoaded = true;
  loadFiles();
- }
 });
 
 logoutBtn.addEventListener("click", async () => {
- sessionStorage.removeItem("dd_face_ok");
  await logout();
  location.replace("index.html");
 });
 
 // ---------- load all files and folders from GitHub ----------
-// Method 1: git tree (one request for everything)
-// Method 2 (fallback): contents API, walking folder by folder
-async function fetchAllEntries() {
- const treeUrl =
- `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/git/trees/${GITHUB.branch}?recursive=1`;
-
- const res = await fetch(treeUrl, { cache: "no-store" });
- if (res.ok) {
- const data = await res.json();
- if (data.truncated) console.warn("GitHub tree was truncated; falling back to contents API");
- if (!data.truncated) {
- return (data.tree || [])
- .filter((item) => item.path.startsWith(GITHUB.folder + "/"))
- .map((item) => ({
- path: item.path.slice(GITHUB.folder.length + 1),
- type: item.type === "tree" ? "dir" : "file",
- size: item.size || 0,
- }));
- }
- } else if (res.status === 404) {
- throw new Error("Repository or branch not found. Check config.js (user, repo, branch).");
- }
-
- // Fallback: walk the folders with the contents API
- return await walkContents(GITHUB.folder);
-}
-
-async function walkContents(relDir) {
- const url =
- `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/contents/${encodeGitPath(GITHUB.folder)}` +
- (relDir === GITHUB.folder ? "" : "/" + encodeGitPath(relDir.slice(GITHUB.folder.length + 1)));
-
- const res = await fetch(url + `?ref=${GITHUB.branch}`, { cache: "no-store" });
- if (!res.ok) {
- if (res.status === 404) return [];
- throw new Error("GitHub contents HTTP " + res.status);
- }
- const items = await res.json();
- let out = [];
- for (const it of items) {
- const rel = it.path.slice(GITHUB.folder.length + 1);
- if (it.type === "dir") {
- out.push({ path: rel, type: "dir", size: 0 });
- out = out.concat(await walkContents(it.path));
- } else if (it.type === "file") {
- out.push({ path: rel, type: "file", size: it.size || 0 });
- }
- }
- return out;
-}
-
-function encodeGitPath(p) {
- return p.split("/").map(encodeURIComponent).join("/");
-}
-
 async function loadFiles() {
  statusEl.textContent = "Loading...";
+ const api =
+ `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/git/trees/${GITHUB.branch}?recursive=1`;
  try {
- const entries = await fetchAllEntries();
+ const res = await fetch(api, { cache: "no-store" });
+ if (!res.ok) throw new Error("HTTP " + res.status);
+ const data = await res.json();
 
+ const prefix = GITHUB.folder + "/";
  allFiles = [];
  const folderSet = new Map();
 
- for (const e of entries) {
- const parts = e.path.split("/");
+ for (const item of data.tree) {
+ if (!item.path.startsWith(prefix)) continue;
+ const rel = item.path.slice(prefix.length);
+ const parts = rel.split("/");
 
- if (e.type === "dir") {
- folderSet.set(e.path, parts);
+ if (item.type === "tree") {
+ folderSet.set(rel, parts);
  continue;
  }
+ if (item.type !== "blob") continue;
 
- // Every parent folder of a file also counts as a folder
  for (let i = 1; i < parts.length; i++) {
  const p = parts.slice(0, i);
  folderSet.set(p.join("/"), p);
  }
 
- if (/\.pdf$/i.test(e.path)) {
+ if (/\.pdf$/i.test(rel)) {
  allFiles.push({
  name: parts[parts.length - 1],
- path: e.path,
+ path: rel,
  folders: parts.slice(0, -1),
- size: e.size,
+ size: item.size,
  });
  }
  }
@@ -201,7 +131,6 @@ async function loadFiles() {
  renderAdmin();
  } catch (err) {
  statusEl.textContent = "Could not load the list: " + err.message;
- console.error("loadFiles failed:", err);
  }
 }
 
@@ -211,23 +140,13 @@ function render() {
  listEl.innerHTML = "";
  closeViewer();
 
- // Each row gets an index so CSS can stagger the fade-in animation
- let index = 0;
- const add = (node) => {
- node.style.setProperty("--i", index++);
- listEl.append(node);
- };
-
- // Search mode: no animation, so results do not jump on each keystroke
- listEl.classList.toggle("no-anim", !!q);
-
  if (q) {
  crumbsEl.textContent = "Search results (from all folders)";
- const matches = sortFiles(
- allFiles.filter((f) => f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q))
+ const matches = allFiles.filter(
+ (f) => f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)
  );
  statusEl.textContent = matches.length ? "" : "Nothing found.";
- matches.forEach((f) => add(fileRow(f, f.folders.join(" / "))));
+ matches.forEach((f) => listEl.append(fileRow(f, f.folders.join(" / "))));
  return;
  }
 
@@ -246,14 +165,13 @@ function render() {
  (f) => f.folders.length === depth && under(f.folders, currentPath)
  );
 
- // Folders always sorted by name; files follow the sort dropdown
  subfolders.forEach((name) => {
  const count = allFiles.filter(
  (f) => f.folders.length > depth && under(f.folders, currentPath) && f.folders[depth] === name
  ).length;
- add(folderRow(name, count));
+ listEl.append(folderRow(name, count));
  });
- sortFiles(files).forEach((f) => add(fileRow(f, "")));
+ files.forEach((f) => listEl.append(fileRow(f, "")));
 
  if (!allFiles.length && !subfolders.length) statusEl.textContent = "Nothing in notes yet.";
  else if (!subfolders.length && !files.length) statusEl.textContent = "This folder is empty for now.";
@@ -316,7 +234,7 @@ function fileRow(f, label) {
  return el("div", { className: "file" }, info, actions);
 }
 
-// ---------- PDF viewer (shows the PDF inside the site) ----------
+// ---------- PDF viewer ----------
 function closeViewer() {
  const old = document.getElementById("pdf-viewer");
  if (old) old.remove();
@@ -329,7 +247,6 @@ function openViewer(f) {
  const close = el("button", { className: "btn ghost", textContent: "Close", type: "button" });
  close.addEventListener("click", closeViewer);
 
- // pdf.js viewer: it can display PDFs from GitHub raw links
  const viewerUrl =
  "https://mozilla.github.io/pdf.js/web/viewer.html?file=" + encodeURIComponent(rawUrl(f.path));
  const frame = el("iframe", { src: viewerUrl });
@@ -347,9 +264,9 @@ function openViewer(f) {
  box.scrollIntoView({ behavior: "smooth" });
 }
 
-// ---------- admin panel (shown only after password AND face check) ----------
+// ---------- admin panel ----------
 function renderAdmin() {
- if (!isAdminUser || sessionStorage.getItem("dd_face_ok") !== "1") return;
+ if (!isAdminUser) return;
  adminPanel.classList.remove("hidden");
  adminPanel.replaceChildren();
 
@@ -376,7 +293,6 @@ function renderAdmin() {
  clearBtn
  );
 
- // New folder
  const folderIn = el("input", { type: "text", placeholder: "New folder name" });
  const folderBtn = el("button", { className: "btn", textContent: "Create folder", type: "button" });
  folderBtn.onclick = () => run(folderBtn, async () => {
@@ -393,7 +309,6 @@ function renderAdmin() {
  el("div", { className: "row" }, folderIn, folderBtn)
  );
 
- // PDF upload
  const pdfIn = el("input", { type: "file", accept: "application/pdf" });
  const pdfName = el("input", { type: "text", placeholder: "PDF name (optional)" });
  const upBtn = el("button", { className: "btn", textContent: "Upload PDF", type: "button" });
@@ -424,9 +339,4 @@ function renderAdmin() {
  adminPanel.append(adminMsg);
 }
 
-// Admin face check finished: show the admin panel now
-window.addEventListener("face-ok", renderAdmin);
-
-// ---------- events ----------
-searchEl.addEventListener("input", render);
-if (sortEl) sortEl.addEventListener("change", render);
+searchEl.addEventListener("input", render)
