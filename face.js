@@ -1,11 +1,12 @@
 // ============================================
-// Face check for admin (runs in the browser only)
-// face-api.js is loaded from jsDelivr. The face data stays in this browser.
+// Face check (runs in the browser only)
+// Up to 5 people per browser. Only numbers are saved, never the photo.
 // ============================================
 const LIB_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.esm.js";
 const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model";
-const STORE_KEY = "dd_face_descriptor";
-const THRESHOLD = 0.5; // lower number = stricter match
+const PROFILES_KEY = "dd_face_profiles";
+const THRESHOLD = 0.55; // lower = stricter
+const MAX_PEOPLE = 5;
 
 let fa = null;
 
@@ -20,8 +21,33 @@ async function loadLib() {
  return fa;
 }
 
+// Saved people: [{ name, vec }]
+export function getProfiles() {
+ try {
+ return JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]");
+ } catch {
+ return [];
+ }
+}
+
+function saveProfiles(list) {
+ localStorage.setItem(PROFILES_KEY, JSON.stringify(list));
+}
+
 export function hasEnrolledFace() {
- return !!localStorage.getItem(STORE_KEY);
+ return getProfiles().length > 0;
+}
+
+export function canAddPerson() {
+ return getProfiles().length < MAX_PEOPLE;
+}
+
+export function removePerson(name) {
+ saveProfiles(getProfiles().filter((p) => p.name !== name));
+}
+
+export function clearAllFaces() {
+ localStorage.removeItem(PROFILES_KEY);
 }
 
 export async function startCamera(video) {
@@ -49,8 +75,17 @@ async function readFace(video) {
  return det ? det.descriptor : null;
 }
 
-// Takes 3 good samples and saves their average, so one bad frame does not matter
-export async function enrollFace(video) {
+// Takes 3 good samples for this name and saves their average
+export async function enrollFace(video, rawName) {
+ const name = String(rawName || "").trim().slice(0, 40);
+ if (!name) throw new Error("Enter a name first");
+
+ const profiles = getProfiles();
+ if (profiles.length >= MAX_PEOPLE) throw new Error("Maximum 5 people can be added");
+ if (profiles.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+ throw new Error("This name is already added");
+ }
+
  const samples = [];
  for (let tries = 0; tries < 40 && samples.length < 3; tries++) {
  const d = await readFace(video);
@@ -61,20 +96,33 @@ export async function enrollFace(video) {
 
  const avg = new Float32Array(128);
  samples.forEach((s) => s.forEach((v, i) => (avg[i] += v / 3)));
- localStorage.setItem(STORE_KEY, JSON.stringify(Array.from(avg)));
+
+ profiles.push({ name, vec: Array.from(avg) });
+ saveProfiles(profiles);
+ return name;
 }
 
-// Checks a few frames against the saved face
-export async function verifyFace(video) {
- const saved = localStorage.getItem(STORE_KEY);
- if (!saved) return false;
- const ref = new Float32Array(JSON.parse(saved));
+// Returns the matched person's name, or null.
+// If onlyName is given, only that one saved person is checked.
+export async function verifyFace(video, onlyName = null) {
+ let list = getProfiles();
+ if (onlyName) list = list.filter((p) => p.name === onlyName);
+ if (!list.length) return null;
+
  const f = await loadLib();
+ const refs = list.map((p) => ({ name: p.name, vec: new Float32Array(p.vec) }));
 
  for (let tries = 0; tries < 5; tries++) {
  const d = await readFace(video);
- if (d && f.euclideanDistance(ref, d) < THRESHOLD) return true;
+ if (d) {
+ let best = null;
+ for (const r of refs) {
+ const dist = f.euclideanDistance(r.vec, d);
+ if (dist < THRESHOLD && (!best || dist < best.dist)) best = { name: r.name, dist };
+ }
+ if (best) return best.name;
+ }
  await new Promise((r) => setTimeout(r, 300));
  }
- return false;
+ return null;
 }

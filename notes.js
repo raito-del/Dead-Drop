@@ -1,10 +1,9 @@
 // ============================================
-// Notes page: login check, face check, folder view, search, sort, animation, AI, admin
+// Notes page: face guard, folder view, search, sort, admin
 // ============================================
 import { GITHUB } from "./config.js";
 import { watchAuth, logout, isAdmin } from "./auth.js";
 import { getToken, saveToken, clearToken, createFolder, uploadPdf } from "./github.js";
-import { askAI } from "./ai.js";
 
 const $ = (id) => document.getElementById(id);
 const listEl = $("list");
@@ -14,10 +13,6 @@ const statusEl = $("status");
 const content = $("content");
 const adminPanel = $("admin-panel");
 const logoutBtn = $("logout");
-const aiForm = $("ai-form");
-const aiInput = $("ai-input");
-const aiSend = $("ai-send");
-const aiAnswer = $("ai-answer");
 
 const crumbsEl = document.createElement("div");
 crumbsEl.className = "crumbs";
@@ -28,6 +23,7 @@ let allFolders = [];  // [["first-year"], ["first-year", "cp-2"]]
 let currentPath = []; // the folder the user is currently in
 let isAdminUser = false;
 let adminMsg = null;
+let filesLoaded = false;
 
 // ---------- helper ----------
 const el = (tag, props = {}, ...kids) => {
@@ -80,9 +76,9 @@ async function run(btn, fn) {
  }
 }
 
-// Sort the file list according to the dropdown
+// Sort the file list according to the dropdown (name A-Z if there is no dropdown)
 function sortFiles(list) {
- const mode = sortEl.value;
+ const mode = sortEl ? sortEl.value : "name";
  return [...list].sort((a, b) => {
  if (mode === "size") return b.size - a.size;
  if (mode === "name-desc") return b.name.localeCompare(a.name);
@@ -90,13 +86,20 @@ function sortFiles(list) {
  });
 }
 
-// ---------- login guard ----------
+// ---------- guard ----------
+// The notes page opens only after the face check (or password) on index.html.
 watchAuth((user) => {
- if (!user) { location.replace("index.html"); return; }
+ if (sessionStorage.getItem("dd_face_ok") !== "1") {
+ location.replace("index.html");
+ return;
+ }
  content.classList.remove("hidden");
  isAdminUser = isAdmin(user);
  renderAdmin();
+ if (!filesLoaded) {
+ filesLoaded = true;
  loadFiles();
+ }
 });
 
 logoutBtn.addEventListener("click", async () => {
@@ -255,145 +258,4 @@ function fileRow(f, label) {
  dl.rel = "noopener";
  dl.setAttribute("download", f.name);
 
- const meta = [label, sizeText(f.size)].filter(Boolean).join(" · ");
- const info = el("div", {},
- el("div", { className: "file-name", textContent: f.name.replace(/\.pdf$/i, "") }),
- el("div", { className: "file-meta", textContent: meta })
- );
-
- const actions = el("div", { style: "display:flex; gap:8px; flex-wrap:wrap;" }, read, dl);
- return el("div", { className: "file" }, info, actions);
-}
-
-// ---------- PDF viewer (shows the PDF inside the site) ----------
-function closeViewer() {
- const old = document.getElementById("pdf-viewer");
- if (old) old.remove();
-}
-
-function openViewer(f) {
- closeViewer();
-
- const box = el("div", { id: "pdf-viewer", className: "admin-panel" });
- const close = el("button", { className: "btn ghost", textContent: "Close", type: "button" });
- close.addEventListener("click", closeViewer);
-
- // pdf.js viewer: it can display PDFs from GitHub raw links
- const viewerUrl =
- "https://mozilla.github.io/pdf.js/web/viewer.html?file=" + encodeURIComponent(rawUrl(f.path));
- const frame = el("iframe", { src: viewerUrl });
- frame.style.cssText = "width:100%; height:70vh; border:0; background:#000; margin-top:12px;";
-
- box.append(
- el("div", { style: "display:flex; justify-content:space-between; align-items:center; gap:10px;" },
- el("h2", { textContent: f.name.replace(/\.pdf$/i, ""), style: "margin:0;" }),
- close
- ),
- frame
- );
-
- listEl.after(box);
- box.scrollIntoView({ behavior: "smooth" });
-}
-
-// ---------- admin panel (shown only after password AND face check) ----------
-function renderAdmin() {
- if (!isAdminUser || sessionStorage.getItem("dd_face_ok") !== "1") return;
- adminPanel.classList.remove("hidden");
- adminPanel.replaceChildren();
-
- const where = "notes" + (currentPath.length ? " / " + currentPath.join(" / ") : "");
- adminPanel.append(
- el("h2", { textContent: "admin: folders & PDFs" }),
- el("div", { className: "hint", textContent: "You are in: " + where })
- );
-
- if (!getToken()) {
- const tok = el("input", { type: "password", placeholder: "GitHub token (enter once)", autocomplete: "off" });
- const save = el("button", { className: "btn", textContent: "Save", type: "button" });
- save.onclick = () => {
- if (!tok.value.trim()) return showMsg("Token is empty");
- saveToken(tok.value);
- renderAdmin();
- };
- adminPanel.append(el("div", { className: "row" }, tok, save));
- } else {
- const clearBtn = el("button", { className: "btn ghost", textContent: "Delete token", type: "button" });
- clearBtn.onclick = () => { clearToken(); renderAdmin(); };
- adminPanel.append(
- el("div", { className: "hint", textContent: "GitHub token is saved in this browser." }),
- clearBtn
- );
-
- // New folder
- const folderIn = el("input", { type: "text", placeholder: "New folder name" });
- const folderBtn = el("button", { className: "btn", textContent: "Create folder", type: "button" });
- folderBtn.onclick = () => run(folderBtn, async () => {
- const name = cleanName(folderIn.value);
- if (!name) throw new Error("Enter a folder name");
- await createFolder([...currentPath, name].join("/"));
- currentPath = [...currentPath, name];
- await loadFiles();
- showMsg("Folder created: " + name, true);
- });
-
- adminPanel.append(
- el("h2", { textContent: "New folder" }),
- el("div", { className: "row" }, folderIn, folderBtn)
- );
-
- // PDF upload
- const pdfIn = el("input", { type: "file", accept: "application/pdf" });
- const pdfName = el("input", { type: "text", placeholder: "PDF name (optional)" });
- const upBtn = el("button", { className: "btn", textContent: "Upload PDF", type: "button" });
- upBtn.onclick = () => run(upBtn, async () => {
- const file = pdfIn.files[0];
- if (!file) throw new Error("Select a PDF first");
- if (file.size > 95 * 1024 * 1024) throw new Error("File is too large (max ~95MB)");
-
- const base = cleanName(pdfName.value || file.name).replace(/\.pdf$/i, "").trim();
- if (!base) throw new Error("Enter a PDF name");
-
- const name = base + ".pdf";
- await uploadPdf(file, [...currentPath, name].join("/"));
- pdfIn.value = "";
- pdfName.value = "";
- await loadFiles();
- showMsg("Uploaded: " + name, true);
- });
-
- adminPanel.append(
- el("h2", { textContent: "Upload PDF to this folder" }),
- el("div", { className: "row" }, pdfIn),
- el("div", { className: "row" }, pdfName, upBtn)
- );
- }
-
- adminMsg = el("div", { className: "hint" });
- adminPanel.append(adminMsg);
-}
-
-// Face check finished successfully: show the admin panel now
-window.addEventListener("face-ok", renderAdmin);
-
-// ---------- events ----------
-searchEl.addEventListener("input", render);
-sortEl.addEventListener("change", render);
-
-// ---------- AI assistant ----------
-aiForm.addEventListener("submit", async (e) => {
- e.preventDefault();
- const question = aiInput.value.trim();
- if (!question) return;
-
- aiSend.disabled = true;
- aiAnswer.textContent = "Thinking...";
- try {
- // Send the current folder path as context, so the AI knows what the user is looking at
- aiAnswer.textContent = await askAI(question, currentPath.join(" / "));
- } catch (err) {
- aiAnswer.textContent = "Error: " + err.message;
- } finally {
- aiSend.disabled = false;
- }
-});
+ const meta = [label, sizeText(f.size)].filter(Boolean).join(" ·

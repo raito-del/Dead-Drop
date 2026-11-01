@@ -55,7 +55,7 @@
  <div class="error" id="admin-msg"></div>
  </form>
 
- <!-- Face check: appears after a correct admin password -->
+ <!-- Admin face check: appears after a correct admin password -->
  <section id="face-box" class="admin-panel hidden">
  <h2>face check</h2>
  <video id="face-video" width="320" height="240" autoplay muted playsinline
@@ -79,8 +79,10 @@
  </div>
  </main>
 
- <!-- KEEP YOUR ORIGINAL FOOTER HERE (Arabic and Bangla quote lines + "Made by Team BreakByte") -->
  <footer class="site-footer">
+ <p class="quote-ar" lang="ar" dir="rtl">أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّةِ مِنْ كُلِّ شَيْطَانٍ وَهَامَّةٍ، وَمِنْ كُلِّ عَيْنٍ لَامَّةٍ</p>
+ <p class="quote-bn">আউযু বিকালিমা তিল্লাহি তাম্মা মিন কুল্লি শাইতানিও ওয়া হাম্মা, ওয়া মিন কুল্লি আইনিল লাম্মা</p>
+ <div>Made by Team <b>BreakByte</b></div>
  </footer>
 
  <script type="module" src="matrix.js"></script>
@@ -101,7 +103,6 @@
  const faceCancel = document.getElementById("face-cancel");
 
  let stream = null;
- let mode = "verify";
  let attempts = 0;
 
  toggle.addEventListener("click", () => form.classList.toggle("hidden"));
@@ -124,13 +125,10 @@
  }
 
  async function openFaceCheck() {
- mode = hasEnrolledFace() ? "verify" : "enroll";
  attempts = 0;
  box.classList.remove("hidden");
- faceBtn.textContent = mode === "enroll" ? "Enroll my face" : "Verify";
- faceMsg.textContent = mode === "enroll"
- ? "First time: look straight at the camera, then click Enroll my face."
- : "Look at the camera, then click Verify.";
+ faceBtn.textContent = "Verify";
+ faceMsg.textContent = "Look at the camera, then click Verify.";
  try {
  stream = await startCamera(video);
  } catch {
@@ -141,23 +139,18 @@
  faceBtn.addEventListener("click", async () => {
  faceBtn.disabled = true;
  try {
- if (mode === "enroll") {
- faceMsg.textContent = "Scanning your face...";
- await enrollFace(video);
- finishFaceCheck();
- } else {
  faceMsg.textContent = "Checking...";
- if (await verifyFace(video)) {
+ // Only the admin's own face is accepted here
+ if (await verifyFace(video, "admin")) {
  finishFaceCheck();
- } else {
+ return;
+ }
  attempts++;
  if (attempts >= 3) {
  faceMsg.textContent = "Face not recognized. Logging out.";
  await cancelFaceCheck();
  } else {
  faceMsg.textContent = "Face not recognized. Try again (" + attempts + "/3).";
- }
- }
  }
  } catch (err) {
  faceMsg.textContent = "Error: " + err.message;

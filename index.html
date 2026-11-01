@@ -1,71 +1,130 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dead-Drop</title>
-  <link rel="stylesheet" href="style.css">
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Dead-Drop</title>
+ <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="matrix"></canvas>
+ <canvas id="matrix"></canvas>
 
-  <main class="wrap center">
-    <div class="terminal">
-      <div class="terminal-bar">root@dead-drop:~$</div>
+ <main class="wrap center">
+ <div class="terminal">
+ <div class="terminal-bar">root@dead-drop:~$</div>
+ <h1>DEAD-DROP</h1>
+ <div class="hint">secure notes vault</div>
+ <br>
+ <div id="typing-lines"></div>
 
-      <h1>DEAD-DROP</h1>
-      <div class="hint">secure notes vault</div>
-      <br>
+ <div id="gate" class="hidden">
 
-      <div id="typing-lines"></div>
+ <!-- Face check -->
+ <section id="face-gate" class="hidden">
+ <div id="name-row" class="row hidden" style="margin-top:0">
+ <input type="text" id="face-name" placeholder="your name (e.g. rahim)" maxlength="40">
+ </div>
+ <video id="face-video" width="320" height="240" autoplay muted playsinline
+ style="width:100%; max-width:320px; border:1px solid #12401f; border-radius:4px; background:#000; margin-top:12px;"></video>
+ <div class="hint" id="face-msg"></div>
+ <div class="row">
+ <button class="btn" id="face-action" type="button">Verify</button>
+ <button class="btn ghost" id="add-person" type="button">Add another person</button>
+ <button class="btn ghost" id="use-pw" type="button">Use password instead</button>
+ </div>
+ </section>
 
-      <!-- Password box: typing.js shows this once the typing animation finishes -->
-      <form id="gate" class="hidden" autocomplete="off">
-        <div class="row">
-          <input type="password" id="pw" placeholder="enter access key" required>
-          <button type="submit" class="btn" id="go">Unlock</button>
-        </div>
-        <div class="error" id="msg"></div>
-      </form>
-    </div>
-  </main>
+ <!-- Access key form -->
+ <form id="pw-form" class="hidden" autocomplete="off">
+ <div class="row">
+ <input type="password" id="pw" placeholder="enter access key" required>
+ <button type="submit" class="btn" id="go">Unlock</button>
+ </div>
+ <div class="error" id="msg"></div>
+ </form>
 
-  <footer class="site-footer">
-    <p class="quote-ar" lang="ar" dir="rtl">أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّةِ مِنْ كُلِّ شَيْطَانٍ وَهَامَّةٍ، وَمِنْ كُلِّ عَيْنٍ لَامَّةٍ</p>
-    <p class="quote-bn">আউযু বিকালিমা তিল্লাহি তাম্মা মিন কুল্লি শাইতানিও ওয়া হাম্মা, ওয়া মিন কুল্লি আইনিল লাম্মা</p>
-    <div>Made by Team <b>BreakByte</b></div>
-  </footer>
+ </div>
+ </div>
+ </main>
 
-  <script type="module" src="matrix.js"></script>
-  <script type="module" src="typing.js"></script>
-  <script type="module">
-    import { loginViewer, watchAuth, errorText } from "./auth.js";
+ <footer class="site-footer">
+ <p class="quote-ar" lang="ar" dir="rtl">أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّةِ مِنْ كُلِّ شَيْطَانٍ وَهَامَّةٍ، وَمِنْ كُلِّ عَيْنٍ لَامَّةٍ</p>
+ <p class="quote-bn">আউযু বিকালিমা তিল্লাহি তাম্মা মিন কুল্লি শাইতানিও ওয়া হাম্মা, ওয়া মিন কুল্লি আইনিল লাম্মা</p>
+ <div>Made by Team <b>BreakByte</b></div>
+ </footer>
 
-    const form = document.getElementById("gate");
-    const pw = document.getElementById("pw");
-    const msg = document.getElementById("msg");
-    const btn = document.getElementById("go");
+ <script type="module" src="matrix.js"></script>
+ <script type="module" src="typing.js"></script>
+ <script type="module">
+ import { loginViewer, errorText } from "./auth.js";
+ import {
+ hasEnrolledFace, canAddPerson, startCamera, stopCamera,
+ enrollFace, verifyFace, getProfiles, removePerson, clearAllFaces
+ } from "./face.js";
 
-    // If already logged in, go straight to the notes page
-    watchAuth((user) => {
-      if (user) location.href = "notes.html";
-    });
+ // Console helpers: ddFace.list(), ddFace.remove("rahim"), ddFace.clearAll()
+ window.ddFace = {
+ list: () => getProfiles().map((p) => p.name),
+ remove: (name) => { removePerson(name); return "removed " + name; },
+ clearAll: () => { clearAllFaces(); return "all faces cleared"; },
+ };
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      msg.textContent = "";
-      btn.disabled = true;
-      btn.textContent = "Checking...";
-      try {
-        await loginViewer(pw.value);
-        location.href = "notes.html";
-      } catch (err) {
-        msg.textContent = errorText(err);
-        pw.value = "";
-        btn.disabled = false;
-        btn.textContent = "Unlock";
-      }
-    });
-  </script>
-</body>
-</html>
+ const $ = (id) => document.getElementById(id);
+ const gate = $("gate");
+ const faceBox = $("face-gate");
+ const nameRow = $("name-row");
+ const faceName = $("face-name");
+ const video = $("face-video");
+ const faceMsg = $("face-msg");
+ const faceBtn = $("face-action");
+ const addBtn = $("add-person");
+ const usePwBtn = $("use-pw");
+ const pwForm = $("pw-form");
+ const pw = $("pw");
+ const pwMsg = $("msg");
+ const pwBtn = $("go");
+
+ let stream = null;
+ let mode = "verify";    // "verify" or "enroll"
+ let attempts = 0;
+ let pwIntent = "start"; // "start", "add", or "fallback"
+
+ // Opens notes.html. who = matched name, or "password" for password-only access
+ function goNotes(who) {
+ sessionStorage.setItem("dd_face_ok", "1");
+ sessionStorage.setItem("dd_who", who || "member");
+ location.href = "notes.html";
+ }
+
+ function showPassword(note, intent) {
+ pwIntent = intent;
+ stopCamera(stream);
+ faceBox.classList.add("hidden");
+ pwForm.classList.remove("hidden");
+ pwMsg.textContent = note;
+ pw.focus();
+ }
+
+ async function openFace(m) {
+ mode = m;
+ attempts = 0;
+ pwForm.classList.add("hidden");
+ faceBox.classList.remove("hidden");
+ nameRow.classList.toggle("hidden", m !== "enroll");
+ faceName.value = "";
+ faceBtn.textContent = m === "enroll" ? "Enroll this face" : "Verify";
+ faceMsg.textContent = m === "enroll"
+ ? "Type a name, look straight at the camera, then click Enroll this face."
+ : "Look at the camera, then click Verify.";
+ try {
+ stream = await startCamera(video);
+ } catch {
+ faceMsg.textContent = "Camera is not available. Allow camera access or use the password.";
+ }
+ }
+
+ function init() {
+ if (hasEnrolledFace()) {
+ openFace("verify");
+ } else {
+ showPassword("Enter the access key to start. The first person added will be
